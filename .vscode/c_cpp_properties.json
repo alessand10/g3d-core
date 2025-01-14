@@ -4,17 +4,25 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
+                "${workspaceFolder}/source/**",
                 "${workspaceFolder}/extern/glm/glm/**",
                 "${workspaceFolder}/../g3d-api-layer/**",
                 "${workspaceFolder}/../g3d-utils/**"
 
             ],
+
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/**",
+                    "${workspaceFolder}/../g3d-api-layer/**"
+                ]
+            },
+            
             "defines": [],
-            "compilerPath": "/usr/bin/gcc",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "gcc-x64"
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64"
 
         }
     ]

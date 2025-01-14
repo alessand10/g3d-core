@@ -9,14 +9,23 @@ add_subdirectory(../../g3d-api-layer/source api-layer-bin)
 add_subdirectory(../../g3d-utils/source utils-bin)
 
 add_library(g3d-core
-    scene-capture.cpp
     cube-map.cpp
     entity-factory.cpp
-    components/world-transform-component.cpp
+    components/transform-component.cpp
     scene-commands.cpp
     geometric-partition.cpp
     g3d-engine.cpp
     frame-graph/frame-graph.cpp
+    subsystems/rendering/rendering-subsystem.cpp
+    subsystems/pipeline/pipeline-subsystem.cpp
+    subsystems/geometry/geometry-subsystem.cpp
+    subsystems/material/material-subsystem.cpp
+    frame-graph/fg-node.cpp
+    scene-capture.cpp
+    pbr-material.cpp
+    mipmap-generator.cpp
+    image-loader.cpp
+    g3d-renderer.cpp
 )
 
 target_link_libraries(g3d-core
@@ -27,6 +36,8 @@ target_link_libraries(g3d-core
 
 target_include_directories(g3d-core
     PUBLIC .
+    PUBLIC subsystems/engine
+    PUBLIC subsystems/rendering
     PUBLIC ../g3d-api-layer/include
     PUBLIC ../g3d-utils/include
 )

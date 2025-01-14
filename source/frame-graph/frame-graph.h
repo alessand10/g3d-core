@@ -2,129 +2,127 @@
 #include "graph.h"
 #include "fg-node.h"
 #include "fg-do-once-node.h"
-#include "fg-for-each-node.h"
+#include "fg-for-loop-node.h"
 #include "fg-action-node.h"
+#include "fg-binary-sequence-node.h"
 #include "minimal-type-defines.h"
 #include "allocators/pooled-allocator-manager.h"
-#include "allocators/allocator-v2.h"
+#include "allocators/g3d-stack-allocator.h"
 #include <stack>
 
 #define MAX_NODES 24
 #define MAX_NODE_TYPES 8
+#define STACK_SIZE 64
 
-typedef int FGNodeDataID;
+typedef int FGID;
 
 class G3DFrameGraph {
-    Allocator m_nodeAllocator;
-    Allocator m_nodeDataAllocator;
+    G3DStackAllocator m_nodeFGData;
 
-    FGNode* m_entryNode;
-    FGNode* m_exitNode;
+
+    class IG3DCommandListAllocator* m_commandListAllocator;
+
+    // Initially, the whole graph will get one command list, but this will change in the future when subgraphs are added
+    class IG3DCommandList* m_commandList;
+
+    FGNode* m_nodes[MAX_NODES];
+
+    FGNodeID m_entryNodeId;
     public:
 
-
-    FGDoOnceNode* addDoOnceNode() {
-        FGDoOnceNode* entry = m_nodeAllocator.allocate<FGDoOnceNode>();
-        entry->m_nodeDataAllocator = &m_nodeDataAllocator;
-        int index = m_nodeAllocator.getUniqueID(entry);
-        entry->setIdentifier(index);
-        return entry;
+    IG3DCommandList* getCommandList() {
+        return m_commandList;
     }
 
-    FGForLoopNode* addForLoopNode(int iterationCount) {
-        FGForLoopNode* entry = m_nodeAllocator.allocate<FGForLoopNode>();
-        entry->m_nodeDataAllocator = &m_nodeDataAllocator;
-        int index = m_nodeAllocator.getUniqueID(entry);
-        int* iterationVariable = entry->allocateOutputData<CLASS_HASH(int)>(0); // Allocate the output data for the iterator variable
-        int* numIterations = entry->allocateOutputData<CLASS_HASH(int)>(1); // Allocate the output data for the iteration count
-
-        *iterationVariable = -1;
-        *numIterations = iterationCount;
-        
-        entry->setIdentifier(index);
-        return entry;
+    G3DStackAllocator* getNodeDataAllocator() {
+        return &m_nodeFGData;
     }
 
-    FGActionNode* addActionNode(void (*action)(FGActionNode* node)) {
-        FGActionNode* entry = m_nodeAllocator.allocate<FGActionNode>();
-        entry->m_nodeDataAllocator = &m_nodeDataAllocator;
-        int index = m_nodeAllocator.getUniqueID(entry);
-        entry->action = action;
+    template <typename T>
+    FGID addNode() {
+        FGNodeID nodeId = m_nodeFGData.allocate<T>();
+        T* entry = m_nodeFGData.get<T>(nodeId);
+        entry->m_frameGraph = this;
+        int index = m_nodeFGData.getId(entry);
         entry->setIdentifier(index);
-        return entry;
+        entry->m_frameGraph = this;
+        m_nodes[index] = entry;
+        return nodeId;
     }
 
     void executeNode(FGNode* node) {
-        node->execute(&m_nodeDataAllocator);
+        node->execute(&m_nodeFGData);
     }
 
     void init(class G3DEngine* engine);
 
-    FGNode* getEntryNode() {
-        return m_entryNode;
-    }
-
-    FGNode* getExitNode() {
-        return m_exitNode;
-    }
-
-    template <typename T, uint32_t typeHash>
-    T* addNodeData() {
-        return m_nodeDataAllocator.allocate<T, typeHash>();
-    }
-
-    int getUniqueNodeDataID(void* ptr) {
-        return m_nodeDataAllocator.getUniqueID(ptr);
+    void setEntryNode(FGNodeID nodeId) {
+        m_entryNodeId = nodeId;
     }
 
     template <typename T>
-    T* getNodeData(FGNodeDataID id) {
-        return m_nodeDataAllocator.getByID<T>(id);
+    FGID addNodeData() {
+        static_assert(std::is_base_of<GClass, T>::value, "T must be a subclass of GClass");
+        return m_nodeFGData.allocate<T>();
     }
 
+    template <typename T, uint32_t typeHash>
+    FGID addNodeData() {
+        return m_nodeFGData.allocate<T, typeHash>();
+    }
+
+    int getId(void* ptr) {
+        return m_nodeFGData.getId(ptr);
+    }
+
+    template <typename T>
+    T* get(FGID id) {
+        return m_nodeFGData.get<T>(id);
+    }
+
+    template <typename T, uint32_t typeHash>
+    T* get(FGID id) {
+        return m_nodeFGData.get<T, typeHash>(id);
+    }
+
+    uint16_t stackPointer = 0U;
+    FGNodeID nodeStack[STACK_SIZE];
+
+    inline void push(FGNodeID id) {
+        m_nodes[id]->reset();
+        nodeStack[stackPointer++] = id;
+    }
+
+    inline FGNodeID pop() {
+        return nodeStack[--stackPointer];
+    }
+
+    inline bool empty() {
+        return stackPointer == 0;
+    }
+
+    inline FGNodeID top() {
+        return nodeStack[stackPointer - 1];
+    }
 
     void execute() {
 
-        std::stack<FGNodeID> nodePath = {};
-        nodePath.push(m_exitNode->getId());
-        nodePath.push(m_entryNode->getId());
+        push(m_entryNodeId);
 
         FGNodeID currentNodeID = -1;
-        while (!nodePath.empty()) {
+        while (!empty()) {
 
-            // Remove the top node from the stack
-            currentNodeID = nodePath.top();
-            nodePath.pop();
+            // Get the top node from the stack
+            currentNodeID = top();
+            FGNode* currentNode = m_nodes[currentNodeID];
 
-            FGDoOnceNode* doOnceNode = m_nodeAllocator.getByID<FGDoOnceNode>(currentNodeID);
-            if (doOnceNode) {
-                executeNode(doOnceNode);
-                if (doOnceNode->m_nextId != -1)
-                    nodePath.push(doOnceNode->m_nextId);
-                continue;
-            }
+            // Execute the node
+            int nextNodeID = currentNode->execute(&m_nodeFGData);
 
-            FGForLoopNode* forEachNode = m_nodeAllocator.getByID<FGForLoopNode>(currentNodeID);
-            if (forEachNode) {
-                executeNode(forEachNode);
-                if (forEachNode->getPendingReset()) {
-                    forEachNode->reset();
-                    nodePath.push(forEachNode->m_nextId);
-                }
-                else if (forEachNode->getCurrentIteration() < forEachNode->getIterationCount()) {
-                    nodePath.push(currentNodeID);
-                    nodePath.push(forEachNode->repeatNodeID);
-                }
-                continue;
-            }
-
-            FGActionNode* actionNode = m_nodeAllocator.getByID<FGActionNode>(currentNodeID);
-            if (actionNode) {
-                executeNode(actionNode);
-                if (actionNode->m_nextId != -1) 
-                    nodePath.push(actionNode->m_nextId);
-                continue;
-            }
+            if (nextNodeID != -1) 
+                push(nextNodeID);
+            else 
+                pop();
 
         }
     }

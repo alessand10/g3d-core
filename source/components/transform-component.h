@@ -2,7 +2,7 @@
 #include "component-base.h"
 #include "glm/glm.hpp"
 
-class G3DWorldTransformComponent : public IG3DComponent {
+class G3DTransformComponent : public IG3DComponent {
     COMPONENT_BASE(G3DWorldTransformComponent);
 
     public:
@@ -20,9 +20,9 @@ class G3DWorldTransformComponent : public IG3DComponent {
     void update() override {};
     void destroy() override {};
 
-    G3DWorldTransformComponent();
-    ~G3DWorldTransformComponent();
-    glm::mat4 getWorldMatrix();
+    G3DTransformComponent();
+    ~G3DTransformComponent();
+    glm::mat4 getTransformMatrix();
     void translate(glm::vec3 translation);
     void rotate(float angle, glm::vec3 axis);
     void scale(glm::vec3 scale);

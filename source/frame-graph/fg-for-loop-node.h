@@ -6,33 +6,41 @@ class FGForLoopNode : public FGNode {
     GCLASS_BODY(FGForLoopNode)
     friend class G3DFrameGraph;
 
-    FGNodeID repeatNodeID;
+    FGNodeID m_repeatId = -1;
+    FGNodeID m_nextId = -1;
 
     bool m_pendingReset = false;
 
     public:
 
     void setRepeatNode(FGNodeID identifier) {
-        repeatNodeID = identifier;
+        m_repeatId = identifier;
     }
 
     FGNodeID getRepeatNode() {
-        return repeatNodeID;
+        return m_repeatId;
     }
 
-    void reset() {
+    virtual void reset() {
+        FGNode::reset();
         (*getOutputData<CLASS_HASH(int)>(0)) = -1;
         m_pendingReset = false;
     }
 
-    void execute(class Allocator* nodeData) override {
+    int execute(class G3DStackAllocator* nodeData) override {
+        if (m_done) return -1;
+
         int* iterationVariable = getOutputData<CLASS_HASH(int)>(0);
         int* numIterations = getOutputData<CLASS_HASH(int)>(1);
-        if (*iterationVariable < *numIterations) 
+        if (*iterationVariable < (*numIterations) - 1) {
             (*iterationVariable)++;
-        
-        if (*iterationVariable == *numIterations) 
+            return m_repeatId;
+        }
+        else {
+            m_done = true;
             m_pendingReset = true;
+            return m_nextId;
+        }
     };
 
     int getCurrentIteration() {

@@ -3,6 +3,8 @@
 
 typedef int ComponentTypeID;
 
+typedef int ComponentID;
+
 #define COMPONENT_BASE(type) \
     friend class G3DWorld;\
     public: \

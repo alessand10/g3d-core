@@ -15,10 +15,19 @@ class G3DMesh {
     uint32_t* m_indexData;
     unsigned int m_indexCount;
     unsigned int m_indexSize;
+    unsigned int m_materialIndex;
 
     public:
     void setName(const char* name) {
         m_name = name;
+    }
+
+    void setMaterialIndex(unsigned int materialIndex) {
+        m_materialIndex = materialIndex;
+    }
+
+    unsigned int getMaterialIndex() {
+        return m_materialIndex;
     }
 
     const char* getName() {

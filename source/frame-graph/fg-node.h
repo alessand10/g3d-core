@@ -1,9 +1,9 @@
 #pragma once
 #include "gclass.h"
-#include "allocators/allocator-v2.h"
+#include "allocators/g3d-stack-allocator.h"
 
-#define MAX_INPUTS 5
-#define MAX_OUTPUTS 5
+#define MAX_INPUTS 3
+#define MAX_OUTPUTS 3
 
 // Represents the node type in the frame graph
 typedef int FGNodeID;
@@ -11,9 +11,9 @@ typedef int FGNodeID;
 class FGNode : public GClass {
     public:
     FGNodeID m_id;
-    FGNodeID m_nextId = -1;
+    bool m_done = false;
 
-    Allocator* m_nodeDataAllocator = nullptr;
+    class G3DFrameGraph* m_frameGraph = nullptr;
 
     // This is a general purpose data reference that can be used to store any type of data
     int16_t inputDataIds[MAX_INPUTS];
@@ -29,8 +29,16 @@ class FGNode : public GClass {
         }
     }
 
-    virtual void execute(class Allocator* nodeData) = 0;
+    G3DFrameGraph* getFrameGraph() {
+        return m_frameGraph;
+    }
 
+    // Returns the next node in the graph
+    virtual int execute(class G3DStackAllocator* nodeData) = 0;
+
+    virtual void reset() {
+        m_done = false;
+    }
 
     FGNodeID getId() {
         return m_id;
@@ -40,9 +48,6 @@ class FGNode : public GClass {
         m_id = id;
     }
 
-    void setNextNode(FGNodeID id) {
-        m_nextId = id;
-    }
 
     int getInputDataId(int slot) {
         return inputDataIds[slot];
@@ -60,22 +65,24 @@ class FGNode : public GClass {
         outputDataIds[slot] = id;
     }
 
+    G3DStackAllocator* getNodeDataAllocator();
+
     template <typename T, uint32_t typeHash>
     T* getInputData(int slot) {
-        return m_nodeDataAllocator->getByID<T, typeHash>(inputDataIds[slot]);
-
+        return getNodeDataAllocator()->get<T, typeHash>(inputDataIds[slot]);
     }
 
     template <typename T, uint32_t typeHash>
     T* allocateOutputData(int slot) {
+        G3DStackAllocator* m_nodeDataAllocator = getNodeDataAllocator();
         T* data = m_nodeDataAllocator->allocate<T, typeHash>();
-        outputDataIds[slot] = m_nodeDataAllocator->getUniqueID(data);
+        outputDataIds[slot] = m_nodeDataAllocator->getId(data);
         return data;
     }
 
     template <typename T, uint32_t typeHash>
     T* getOutputData(int slot) {
-        return m_nodeDataAllocator->getByID<T, typeHash>(outputDataIds[slot]);
+        return getNodeDataAllocator()->get<T, typeHash>(outputDataIds[slot]);
     }
 
 
