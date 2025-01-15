@@ -48,21 +48,21 @@ glm::vec3 G3DTransformComponent::getPosition()
 }
 
 
-glm::vec3 G3DTransformComponent::getForwardDirection()
+glm::vec3 G3DTransformComponent::getBackwardDirection()
 {
     glm::mat4 worldMatrix = getTransformMatrix();
     return glm::vec3{worldMatrix[0][2], worldMatrix[1][2], worldMatrix[2][2]};
 }
 
-glm::vec3 G3DTransformComponent::getBackwardDirection()
+glm::vec3 G3DTransformComponent::getForwardDirection()
 {
-    return -1.f * getForwardDirection();
+    return -1.f * getBackwardDirection();
 }
 
 glm::vec3 G3DTransformComponent::getUpDirection()
 {
     glm::mat4 worldMatrix = getTransformMatrix();
-    return glm::vec3{worldMatrix[0][1], worldMatrix[1][1], worldMatrix[2][1]};
+    return glm::vec3{-worldMatrix[0][1], -worldMatrix[1][1], -worldMatrix[2][1]};
 }
 
 glm::vec3 G3DTransformComponent::getLeftDirection()

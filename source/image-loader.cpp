@@ -4,9 +4,9 @@
 #include "file-loader.h"
 #include <stdexcept>
 
-Image ImageLoader::loadJPEGImage(const char *path, uint32_t byteAlignment)
+G3DHostImage ImageLoader::loadJPEGImage(const char *path, uint32_t byteAlignment)
 {
-    Image image;
+    G3DHostImage image;
     
     image.m_byteAlignment = byteAlignment;
 

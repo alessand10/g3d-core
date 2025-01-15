@@ -35,6 +35,7 @@ IG3DRenderPipeline *G3DPipelineSubsystem::getPipelineForConfiguration(G3DPipelin
             .config = m_pipelineStates[config->pipelineStateId],
             .vertexStage = m_vertexStages[config->vertexStageId],
             .fragmentStage = m_fragmentStages[config->fragmentStageId],
+            .constantSet = m_constantSets[config->pipelineStateId]
         };
 
         IG3DResourceSetSignature* supportedSignatures[] { m_resourceSetSignatures[config->resourceSetSignatureId] };

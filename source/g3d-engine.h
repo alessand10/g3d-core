@@ -1,6 +1,7 @@
 #pragma once
 #include "glm/glm.hpp"
 #include "gclass.h"
+#include <chrono>
 
 struct ConstantBuffer {
     glm::mat4 world;
@@ -10,8 +11,9 @@ struct ConstantBuffer {
 
 class G3DEngine {
 
-    uint32_t m_windowHeight = 1080U;
-    uint32_t m_windowWidth = 1920U;
+    double deltaTimeMS = 0.0;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastTime;
+    void captureDeltaTime();
 
     /**
      * The set of factories used by subsystems of the G3DEngine.
@@ -38,6 +40,7 @@ class G3DEngine {
 
     class G3DPipelineSubsystem* m_pipelineSubsystem;
     class G3DGeometrySubsystem* m_geometrySubsystem;
+    class G3DMaterialSubsystem* m_materialSubsystem;
 
     /**
      * The 3D world that the engine is rendering.
@@ -45,8 +48,7 @@ class G3DEngine {
     class G3DWorld* m_world;
 
     class G3DRenderer* m_renderer;
-
-    void createViewportWindow();
+    void tick();
 
     void destroy();
 
@@ -57,6 +59,10 @@ class G3DEngine {
 
     class G3DGeometrySubsystem* getGeometrySubsystem() {
         return m_geometrySubsystem;
+    }
+
+    class G3DMaterialSubsystem* getMaterialSubsystem() {
+        return m_materialSubsystem;
     }
 
     IG3DSystemFactory* getSystemFactory() {

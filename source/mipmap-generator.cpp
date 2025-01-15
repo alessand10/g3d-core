@@ -6,10 +6,13 @@
 #include "g3d-execution.h"
 #include <vector>
 #include "file-loader.h"
+#include "g3d-engine.h"
+
 
 void MipmapGenerator::init(G3DEngine *engine)
 {
-    
+    MipmapGenerator::engine = engine;
+
     G3DPipelineBinding computePipelineBindings[] {
         {
             .type = G3DPipelineBindingType::G3DImageViewRead,

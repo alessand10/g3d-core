@@ -5,19 +5,24 @@
 #include "g3d-engine.h"
 #include "world.h"
 #include "g3d-execution/g3d-command-list.h"
+#include "g3d-execution.h"
 #include "subsystems/pipeline/pipeline-subsystem.h"
 #include "g3d-engine.h"
 #include "g3d-pipeline-config.h"
 #include "pbr-material.h"
 #include "file-loader.h"
 #include "subsystems/geometry/geometry-subsystem.h"
+#include "subsystems/material/material-subsystem.h"
+#include "components/camera-component.h"
+#include "components/renderable-component.h"
+#include "components/transform-component.h"
+#include "components/material-component.h"
+#include "glm/ext.hpp"
 
-struct WorldCB {
+struct PushConstants {
     glm::mat4 world;
     float uvScaleX;
     float uvScaleY;
-    // Pad to the next 64 byte boundary
-    float padding[14];
 };
 
 struct ViewProjCB {
@@ -54,6 +59,50 @@ G3DVertexBindingInputs perVertexAttributes {
 
 void G3DRenderer::init(G3DEngine *engine)
 {   
+    this->engine = engine;
+    IG3DResourceFactory* resourceFactory = engine->getResourceFactory();
+    IG3DExecutionFactory* executionFactory = engine->getExecutionFactory();
+    IG3DCommandListAllocator* commandListAllocator = engine->getCommandListAllocator();
+
+    for (int i = 0; i < 4; i++) {
+        commandListPerFrame[i] = executionFactory->allocateCommandList(commandListAllocator);
+    }
+
+    // ------- Create the necessary pipeline resources for the renderer (uniform buffers) ---------
+
+    G3DBufferInfo viewProjBufferInfo {
+        .requestedSize = sizeof(ViewProjCB) * 7, // 1 for the main camera, 6 for the scene capture
+        .isStaging = true,
+        .usage = G3DBufferUsage::CONSTANT_BUFFER
+    };
+
+    viewProjConstBuffer = resourceFactory->createBuffer(&viewProjBufferInfo);
+
+    G3DBufferViewInfo bufferViewInfo {
+    };
+
+    viewProjConstBufferView = resourceFactory->createBufferView(viewProjConstBuffer, &bufferViewInfo);
+
+    G3DBufferInfo worldBufferInfo {
+        .requestedSize = sizeof(PushConstants) * MAX_MESHES, // Support a world matrix for each mesh
+        .isStaging = true,
+        .usage = G3DBufferUsage::CONSTANT_BUFFER
+    };
+
+    worldConstBuffer = resourceFactory->createBuffer(&worldBufferInfo);
+
+    G3DBufferViewInfo worldBufferViewInfo {
+    };
+
+    worldConstBufferView = resourceFactory->createBufferView(worldConstBuffer, &worldBufferViewInfo);
+
+    worldConstBuffer->mapMemory(&mappedWorldConstBuffer, sizeof(PushConstants), 0U);
+    viewProjConstBuffer->mapMemory(&mappedViewProjConstBuffer, sizeof(ViewProjCB) * 7, 0U);
+
+    // ----------------------------------------------------------------------------------------------
+
+    sampler = resourceFactory->createSampler();
+
     G3DPipelineSubsystem* pipelineSubsystem = engine->getPipelineSubsystem();
 
     int defaultVertexBindingInputsId = pipelineSubsystem->addVertexBindingInputs(perVertexAttributes);
@@ -61,12 +110,12 @@ void G3DRenderer::init(G3DEngine *engine)
     rendererPipelineConfig.pipelineBindings = new G3DPipelineBinding[3];
 
     rendererPipelineConfig.pipelineBindings[0] = {
-        .type = G3DPipelineBindingType::G3DConstantBufferDynamic,
+        .type = G3DPipelineBindingType::G3DConstantBuffer,
         .shaderBitmap = G3DShader::G3DVertexShader
     };
 
     rendererPipelineConfig.pipelineBindings[1] = {
-        .type = G3DPipelineBindingType::G3DConstantBufferDynamic,
+        .type = G3DPipelineBindingType::G3DConstantBuffer,
         .shaderBitmap = G3DShader::G3DVertexShader
     };
 
@@ -78,14 +127,13 @@ void G3DRenderer::init(G3DEngine *engine)
     G3DBufferViewBindingUpdate* worldCBUpdate = new G3DBufferViewBindingUpdate();
     worldCBUpdate->binding = 0;
     worldCBUpdate->resource = worldConstBufferView;
-    worldCBUpdate->isDynamic = true;
-    worldCBUpdate->range = sizeof(WorldCB);
     worldCBUpdate->offset = 0;
+    worldCBUpdate->range = sizeof(PushConstants);
 
     G3DBufferViewBindingUpdate* viewProjCBUpdate = new G3DBufferViewBindingUpdate();
     viewProjCBUpdate->binding = 1;
     viewProjCBUpdate->resource = viewProjConstBufferView;
-    viewProjCBUpdate->isDynamic = true;
+    viewProjCBUpdate->offset = 0;
     viewProjCBUpdate->range = sizeof(ViewProjCB);
 
     G3DSamplerBindingUpdate* samplerUpdate = new G3DSamplerBindingUpdate();
@@ -124,6 +172,21 @@ void G3DRenderer::init(G3DEngine *engine)
     };
     int pipelineStateId = pipelineSubsystem->addPipelineState(pipelineState);
 
+    G3DPipelineConstant constants[] {
+        {
+            .size = sizeof(PushConstants),
+            .offset = 0,
+            .shaderBitmap = G3DShader::G3DVertexShader
+        },
+    };
+
+    G3DPipelineConstantSet constantSet {
+        .constants = constants,
+        .constantCount = 1
+    };
+
+    int pipelineConstantSetId = pipelineSubsystem->addPipelineConstantSet(constantSet);
+
     PBRMaterial::initSignature(engine);
     int resourceSetSignatureId = pipelineSubsystem->addResourceSetSignature(PBRMaterial::getResourceSetSignature());
 
@@ -134,15 +197,78 @@ void G3DRenderer::init(G3DEngine *engine)
         .fragmentStageId = fragmentStageId,
         .pipelineStateId = pipelineStateId,
         .vertexBindingInputId = defaultVertexBindingInputsId,
-        .resourceSetSignatureId = resourceSetSignatureId
+        .resourceSetSignatureId = resourceSetSignatureId,
+        .pipelineConstantSetId = pipelineConstantSetId
     };
 
     IG3DRenderPipeline* renderPipeline = pipelineSubsystem->getPipelineForConfiguration(&pipelineConfig);
 }
 
-void G3DRenderer::render()
+void G3DRenderer::render(int frameNumber, IG3DLogicalRenderTarget* screenColorRT, IG3DLogicalRenderTarget* screenDepthStencilRT)
 {
+    // This is the start of a render frame
 
+    G3DViewport viewport = {
+        .x = 0,
+        .y = 0,
+        .width = screenColorRT->getRenderTarget()->getRenderTargetImage()->getWidth(),
+        .height = screenColorRT->getRenderTarget()->getRenderTargetImage()->getHeight(),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+
+    G3DScissor scissor = {
+        .x = 0,
+        .y = 0,
+        .width = screenColorRT->getRenderTarget()->getRenderTargetImage()->getWidth(),
+        .height = screenColorRT->getRenderTarget()->getRenderTargetImage()->getHeight(),
+    };
+
+    G3DRenderConfig renderConfig;
+
+    G3DWorld* world = engine->getWorld();
+
+    renderConfig.m_commandList = commandListPerFrame[frameNumber];
+    renderConfig.m_viewport = &viewport;
+    renderConfig.m_scissor = &scissor;
+    renderConfig.m_colorRT = screenColorRT;
+    renderConfig.m_depthStencilRT = screenDepthStencilRT;
+
+
+    /**
+     * Determine the active camera entity
+     */
+    uint32_t hashIds [] = {
+        STRING_HASH(G3DCameraComponent),
+        STRING_HASH(G3DTransformComponent)
+    };
+
+
+    EntityID* cameraEntites = nullptr;
+    int numCameraEntities = 0;
+
+    // Retrieve all entities that have the necessary components
+    world->getAllEntitiesOfType(hashIds, 2, &cameraEntites, &numCameraEntities);
+
+    renderConfig.m_viewerEntityId = cameraEntites[0];
+
+    commandListPerFrame[frameNumber]->waitUntilFreeAndReset();
+    commandListPerFrame[frameNumber]->beginRecording();
+
+    commandListPerFrame[frameNumber]->cmdEnsureSubImageReady(
+        screenColorRT->getRenderTarget()->getRenderTargetImage(),
+        G3DImageUsage::COLOR_RENDER_TARGET
+    );
+
+    renderScene(&renderConfig);
+
+    commandListPerFrame[frameNumber]->cmdEnsureSubImageReady(
+        screenColorRT->getRenderTarget()->getRenderTargetImage(),
+        G3DImageUsage::PRESENTATION
+    );
+
+    commandListPerFrame[frameNumber]->endRecording();
+    engine->getExecutor()->executeCommandList(commandListPerFrame[frameNumber]);
 }
 
 /**
@@ -150,26 +276,110 @@ void G3DRenderer::render()
  */
 void G3DRenderer::renderScene(G3DRenderConfig* renderConfig)
 {
-    IG3DCommandList* commandList = renderConfig->m_commandList;
+    G3DWorld* world = engine->getWorld();
+    
+    uint32_t hashIds [] = {
+        STRING_HASH(G3DRenderableComponent),
+        STRING_HASH(G3DTransformComponent),
+        STRING_HASH(G3DMaterialComponent)
+    };
 
-    commandList->beginRecording();
+    EntityID* meshEntities = nullptr;
+    int numMeshEntities = 0;
+
+    // Retrieve all entities that have the necessary components to be a mesh entity
+    world->getAllEntitiesOfType(hashIds, 3, &meshEntities, &numMeshEntities);
+
+    G3DCameraComponent* cam = world->getComponentByEntity<CLASS_HASH(G3DCameraComponent)>(renderConfig->m_viewerEntityId);
+    G3DTransformComponent* camTransform = world->getComponentByEntity<CLASS_HASH(G3DTransformComponent)>(renderConfig->m_viewerEntityId);
+
+    ViewProjCB viewProjCB {};
+
+    glm::mat4 camTransformMatrix = camTransform->getTransformMatrix();
+
+    glm::vec3 up = camTransform->getUpDirection();
+    glm::vec3 forward = camTransform->getForwardDirection();
+    glm::vec3 position = camTransform->getPosition();
+    
+    viewProjCB.view = glm::lookAtRH(
+        position,
+        position + forward,
+        up
+    );
+
+    viewProjCB.projection = glm::perspectiveRH(
+        cam->getVFOV(),
+        cam->getAspectRatio(),
+        cam->getNearPlane(),
+        cam->getFarPlane()
+    );
+
+    memcpy(mappedViewProjConstBuffer, &viewProjCB, sizeof(ViewProjCB));
+
+    IG3DCommandList* commandList = renderConfig->m_commandList;
 
     commandList->cmdSetViewport(*renderConfig->m_viewport);
     commandList->cmdSetScissor(*renderConfig->m_scissor);
+
+    // Add this barrier to ensure that host writes occur before all stages of the pipeline
+    commandList->cmdWaitForHostWrite();
 
     // Begin rendering to the provided targets
     commandList->cmdBeginRendering(&renderConfig->m_colorRT, 1U, renderConfig->m_depthStencilRT);
 
     G3DPipelineSubsystem* pipelineSubsystem = engine->getPipelineSubsystem();
+
+    G3DPipelineConfiguration pipelineConfig;
+    pipelineConfig.depthTestEnabled = true;
+    pipelineConfig.depthWriteEnabled = true;
+    pipelineConfig.vertexStageId = 0;
+    pipelineConfig.fragmentStageId = 0;
+    pipelineConfig.pipelineStateId = 0;
+    pipelineConfig.vertexBindingInputId = 0;
+    pipelineConfig.resourceSetSignatureId = 0;
+    pipelineConfig.pipelineConstantSetId = 0;
+
+    IG3DRenderPipeline* renderPipeline = pipelineSubsystem->getPipelineForConfiguration(&pipelineConfig);
+
+    commandList->cmdBindRenderPipeline(renderPipeline);
+    commandList->cmdBindVertexBuffer(engine->getGeometrySubsystem()->getVertexBuffer(), 0);
+    commandList->cmdBindIndexBuffer(engine->getGeometrySubsystem()->getIndexBuffer());
+
     
-    //commandList->cmdBindRenderPipeline(pipelineSubsystem->getPipelineForConfiguration());
 
-    G3DWorld* world = engine->getWorld();
+    for (int i = 0; i < numMeshEntities; i++) {
+        EntityID entityId = meshEntities[i];
 
-    // This will be populated with the list of entities that are renderable
-    std::vector<G3DMeshInsertion> meshInsertions = engine->getGeometrySubsystem()->getInsertedMeshes();
+        G3DTransformComponent* transformComponent = world->getComponentByEntity<CLASS_HASH(G3DTransformComponent)>(entityId);
+        G3DMaterialComponent* materialComponent = world->getComponentByEntity<CLASS_HASH(G3DMaterialComponent)>(entityId);
+        G3DRenderableComponent* renderableComponent = world->getComponentByEntity<CLASS_HASH(G3DRenderableComponent)>(entityId);
 
-    
+        PushConstants pushConstants;
+        pushConstants.world = transformComponent->getTransformMatrix();
+        pushConstants.uvScaleX = 1.0f;
+        pushConstants.uvScaleY = 1.0f;
+
+        commandList->cmdPushConstants(renderPipeline, G3DShader::G3DVertexShader, &pushConstants, sizeof(PushConstants), 0);
+
+        engine->getMaterialSubsystem()->getMaterialResourceSetInstance(materialComponent->getMaterialId());
+        commandList->cmdBindResourceSetInstance(
+            engine->getMaterialSubsystem()->getMaterialResourceSetInstance(materialComponent->getMaterialId()),
+            renderPipeline
+        );
+
+        G3DMeshInsertion* insertion = engine->getGeometrySubsystem()->getMeshInsertion(renderableComponent->getMeshID());
+
+        G3DMesh* mesh = engine->getGeometrySubsystem()->getMesh(insertion->id);
+        commandList->cmdDrawIndexed(
+            mesh->getIndexCount(),
+            1U,
+            insertion->indexOffset,
+            insertion->vertexOffset,
+            0U
+        );
+    }
+
+    commandList->cmdEndRendering();
 }
 
 void G3DRenderer::destroy()

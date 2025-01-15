@@ -26,6 +26,7 @@ add_library(g3d-core
     mipmap-generator.cpp
     image-loader.cpp
     g3d-renderer.cpp
+    g3d-input.cpp
 )
 
 target_link_libraries(g3d-core

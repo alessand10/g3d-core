@@ -35,7 +35,7 @@ void SceneCapture::init(G3DEngine *engine, int width, int height, int mipLevels)
 
     // Create the camera component for this scene capture
     cameraComponentId = world->addComponent<CLASS_HASH(G3DCameraComponent)>(entity);
-    G3DCameraComponent* cameraComponent = world->getComponent<CLASS_HASH(G3DCameraComponent)>(cameraComponentId);
+    G3DCameraComponent* cameraComponent = world->getComponentByComponentId<CLASS_HASH(G3DCameraComponent)>(cameraComponentId);
     cameraComponent->setVFOV(pi / 2.f); // 90 degree vertical field of view
     cameraComponent->setAspectRatio(1.f); // 1:1 aspect ratio, also gives 90 degree horizontal field of view
     cameraComponent->setNearPlane(0.1f);
@@ -47,12 +47,12 @@ void SceneCapture::init(G3DEngine *engine, int width, int height, int mipLevels)
     }
 
     G3DTransformComponent* transformComponent[6] = {
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[0]),
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[1]),
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[2]),
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[3]),
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[4]),
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[5])
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[0]),
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[1]),
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[2]),
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[3]),
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[4]),
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[5])
     };
 
     // The default orientation of the camera is looking down the positive Z axis
@@ -122,7 +122,7 @@ void SceneCapture::translateSceneCapture(float x, float y, float z)
 {
     G3DWorld* world = engine->getWorld();
     for (int i = 0; i < 6; i++) {
-        world->getComponent<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[i])->translate(glm::vec3(x, y, z));
+        world->getComponentByComponentId<CLASS_HASH(G3DTransformComponent)>(transformComponentIds[i])->translate(glm::vec3(x, y, z));
     }
 }
 

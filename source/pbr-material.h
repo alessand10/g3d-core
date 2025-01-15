@@ -45,10 +45,15 @@ class PBRMaterial {
     class IG3DImageView* imageViews[4];
 
     void init (
-            class G3DEngine* engine,
-            // The images are stored in the order albedo, normal, roughness, ao
-            class Image* pbrTextures[4]
-        );
+        class G3DEngine* engine,
+        // The images are stored in the order albedo, normal, roughness, ao
+        class G3DHostImage pbrTextures[4]
+    );
+
+    void initFromPath(
+        class G3DEngine* engine,
+        const char* paths[4]
+    );
 
     class IG3DResourceSetInstance* getResourceSetInstance() {
         return resourceSetInstance;

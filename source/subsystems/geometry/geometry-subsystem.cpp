@@ -2,6 +2,8 @@
 #include "g3d-defines.h"
 #include "g3d-resource.h"
 #include "g3d-engine.h"
+#include "file-loader.h"
+#include "mesh-helper.h"
 
 void G3DGeometrySubsystem::init(G3DEngine *engine)
 {
@@ -33,8 +35,61 @@ void G3DGeometrySubsystem::init(G3DEngine *engine)
 uint32_t currentVertOffset = 0;
 uint32_t currentIndOffset = 0;
 
+MeshID G3DGeometrySubsystem::importOBJMesh(const char *path)
+{
+    GeometryData* meshData = nullptr;
+    uint32_t numMeshes = 0;
+    G3DFileLoader::Geometry::loadOBJ(path, &meshData, &numMeshes);
+
+    G3DSerializeElements elementOrder[] = {
+        G3DSerializeElements::POSITION,
+        G3DSerializeElements::NORMAL,
+        G3DSerializeElements::TEXCOORD,
+        G3DSerializeElements::TANGENT
+    };
+
+    G3DSerializedMeshData serializedData;
+
+    getSerializedMeshData(meshData, &serializedData, elementOrder, 4);
+
+    m_meshes.push_back(G3DMesh());
+
+    G3DMesh* mesh = &m_meshes[m_meshes.size() - 1];
+
+    mesh->setSerialVertexData(serializedData.vertexData);
+    mesh->setVertexCount(serializedData.vertexCount);
+    mesh->setVertexSize(serializedData.vertexSize);
+    mesh->setIndexData(serializedData.indexData);
+    mesh->setIndexCount(serializedData.indexCount);
+    mesh->setIndexSize(serializedData.indexSize);
+
+    return insertMesh(mesh);
+}
+
 MeshID G3DGeometrySubsystem::insertMesh(G3DMesh *mesh)
 {
+
+    // G3DSerializeElements elementOrder[] = {
+    //     G3DSerializeElements::POSITION,
+    //     G3DSerializeElements::NORMAL,
+    //     G3DSerializeElements::TEXCOORD,
+    //     G3DSerializeElements::TANGENT
+    // };
+
+    // G3DSerializedMeshData serializedData;
+
+    // getSerializedMeshData(meshData, &serializedData, elementOrder, 4);
+
+    // mesh->setSerialVertexData(serializedData.vertexData);
+    // mesh->setVertexCount(serializedData.vertexCount);
+    // mesh->setVertexSize(serializedData.vertexSize);
+    // mesh->setIndexData(serializedData.indexData);
+    // mesh->setIndexCount(serializedData.indexCount);
+    // mesh->setIndexSize(serializedData.indexSize);
+
+    // meshOffsets[mesh] = std::make_pair(currentVertOffset / serializedData.vertexSize, currentIndOffset / serializedData.indexSize);
+
+
     G3DMeshInsertion* prevInsertion = m_insertedMeshes.size() > 0 ? &m_insertedMeshes[m_insertedMeshes.size() - 1] : nullptr;
 
     uint32_t vertexDataByteSize = mesh->getVertexCount() * mesh->getVertexSize();
@@ -43,10 +98,15 @@ MeshID G3DGeometrySubsystem::insertMesh(G3DMesh *mesh)
     m_vertexBuffer->loadFromHostMemory((char*)mesh->getSerialVertexData(), vertexDataByteSize, currentVertOffset);
     m_indexBuffer->loadFromHostMemory((char*)mesh->getIndexData(), indexDataByteSize, currentIndOffset);
 
+    G3DMesh* previousMesh = prevInsertion ? &m_meshes[prevInsertion->id] : nullptr;
+    
+
+    uint32_t vertexOffset = prevInsertion ? (prevInsertion->vertexOffset + previousMesh->getVertexCount()) : 0;
+
     G3DMeshInsertion meshInsertion {
-        .mesh = mesh,
-        .vertexOffset = prevInsertion ? prevInsertion->vertexOffset + prevInsertion->mesh->getVertexCount() : 0,
-        .indexOffset = prevInsertion ? prevInsertion->indexOffset + prevInsertion->mesh->getIndexCount() : 0
+        .id = m_meshes.size() - 1,
+        .vertexOffset = prevInsertion ? prevInsertion->vertexOffset + previousMesh->getVertexCount() : 0,
+        .indexOffset = prevInsertion ? prevInsertion->indexOffset + previousMesh->getIndexCount() : 0
     };
 
     currentVertOffset += vertexDataByteSize;

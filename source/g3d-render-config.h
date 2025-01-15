@@ -6,5 +6,5 @@ struct G3DRenderConfig {
     class G3DViewport* m_viewport;
     class G3DScissor* m_scissor;
     class IG3DCommandList* m_commandList;
-    class G3DCameraComponent* m_cameraComponent;
+    int m_viewerEntityId;
 };

@@ -94,9 +94,35 @@ class G3DWorld {
         return true;
     }
 
+    EntityID getAllEntitiesOfTypeResult[MAX_ENTITIES] = {};
+    void getAllEntitiesOfType(uint32_t* componentHashes, int numComponents, EntityID** outEntities, int* outNumEntities) {
+        std::fill_n(getAllEntitiesOfTypeResult, MAX_ENTITIES, -1);
+        int numEntities = 0;
+        for (auto& entity : m_entityComponentMap) {
+            if (entityHasComponents(entity.first, componentHashes, numComponents)) {
+                getAllEntitiesOfTypeResult[numEntities++] = entity.first;
+            }
+        }
+
+        *outNumEntities = numEntities;
+        *outEntities = getAllEntitiesOfTypeResult;
+    }
+
     template <typename T, uint32_t typeHash>
-    T* getComponent(ComponentID id) {
+    T* getComponentByComponentId(ComponentID id) {
         return m_componentAllocator.get<T, typeHash>(id);
+    }
+
+    template <typename T, uint32_t typeHash>
+    T* getComponentByEntity(EntityID entityId) {
+        std::vector<ComponentID>& components = m_entityComponentMap[entityId];
+        for (ComponentID component : components) {
+            if (m_componentAllocator.getGClassID(component) == typeHash) {
+                return m_componentAllocator.get<T, typeHash>(component);
+            }
+        }
+
+        return nullptr;
     }
 
     void destroy() {

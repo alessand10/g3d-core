@@ -9,6 +9,7 @@
 #include <vector>
 #include <stdexcept>
 #include "g3d-renderer.h"
+#include "file-loader.h"
 
 
 void PBRMaterial::initSignature(G3DEngine *engine)
@@ -36,18 +37,18 @@ void PBRMaterial::initSignature(G3DEngine *engine)
     }
 }
 
-void PBRMaterial::init(G3DEngine *engine, Image *pbrTextures[4])
+void PBRMaterial::init(G3DEngine *engine, G3DHostImage *pbrTextures)
 {
     IG3DPipelineFactory* pipelineFactory = engine->getPipelineFactory();
     initSignature(engine);
 
 
-    this->width = pbrTextures[0]->getWidth();
-    this->height = pbrTextures[0]->getHeight();
+    this->width = pbrTextures[0].getWidth();
+    this->height = pbrTextures[0].getHeight();
 
     // Ensure all images are the same size, otherwise throw an exception
     for (int i = 1; i < 4; i++) {
-        if (pbrTextures[i]->getWidth() != width || pbrTextures[i]->getHeight() != height) {
+        if (pbrTextures[i].getWidth() != width || pbrTextures[i].getHeight() != height) {
             throw std::runtime_error("All images must be the same size");
         }
     }
@@ -96,7 +97,7 @@ void PBRMaterial::init(G3DEngine *engine, Image *pbrTextures[4])
     for (int i = 0; i < 4; i++) {
         images[i] = resourceFactory->createImage(&imageInfo);
         // Load the image data into the staging image
-        stagingImage->loadFromHostMemory(pbrTextures[i]->getData(), pbrTextures[i]->getByteSize());
+        stagingImage->loadFromHostMemory(pbrTextures[i].getData(), pbrTextures[i].getByteSize());
         // Copy the image data to the gpu-optimized image
 
         // Wait until this command list is free for writing and execution
@@ -145,4 +146,16 @@ void PBRMaterial::init(G3DEngine *engine, Image *pbrTextures[4])
 
     MipmapGenerator::generateMipmaps(images[0]);
     MipmapGenerator::generateMipmaps(images[1]);
+}
+
+void PBRMaterial::initFromPath(G3DEngine *engine, const char *paths[4])
+{
+    
+    G3DHostImage images[4];
+    for (int i = 0; i < 4; i++) {
+    
+        images[i] = G3DFileLoader::Image::loadJPEGImage(paths[i]);
+    }
+
+    init(engine, images);
 }

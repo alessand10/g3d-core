@@ -4,5 +4,5 @@
 class ImageLoader {
     
     public:
-    static Image loadJPEGImage(const char* path, uint32_t byteAlignment = 0U);
+    static G3DHostImage loadJPEGImage(const char* path, uint32_t byteAlignment = 0U);
 };

@@ -18,6 +18,7 @@ struct G3DPipelineConfiguration {
     int pipelineStateId = -1;
     int vertexBindingInputId = -1;
     int resourceSetSignatureId = -1;
+    int pipelineConstantSetId = -1;
 
     bool operator==(const G3DPipelineConfiguration other) {
         return depthTestEnabled == other.depthTestEnabled &&
@@ -26,7 +27,8 @@ struct G3DPipelineConfiguration {
                 fragmentStageId == other.fragmentStageId &&
                 pipelineStateId == other.pipelineStateId &&
                 vertexBindingInputId == other.vertexBindingInputId &&
-                resourceSetSignatureId == other.resourceSetSignatureId;
+                resourceSetSignatureId == other.resourceSetSignatureId &&
+                pipelineConstantSetId == other.pipelineConstantSetId;
     }
 
     bool operator==(const G3DPipelineConfiguration* other) {
@@ -57,6 +59,7 @@ class G3DPipelineSubsystem {
     std::vector<G3DPipelineStageVertex> m_vertexStages = {};
     std::vector<G3DPipelineStageFragment> m_fragmentStages = {};
     std::vector<G3DPipelineState> m_pipelineStates = {};
+    std::vector<G3DPipelineConstantSet> m_constantSets = {};
     std::vector<class IG3DResourceSetSignature*> m_resourceSetSignatures = {};
 
     public:
@@ -78,6 +81,10 @@ class G3DPipelineSubsystem {
         return m_fragmentStages.size() - 1;
     }
 
+    int addPipelineConstantSet(G3DPipelineConstantSet set) {
+        m_constantSets.push_back(set);
+        return m_constantSets.size() - 1;
+    }
 
     int addPipelineState(G3DPipelineState state) {
         m_pipelineStates.push_back(state);
